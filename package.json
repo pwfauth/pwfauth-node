@@ -1,0 +1,47 @@
+{
+  "name": "pwfauth",
+  "version": "1.0.0",
+  "description": "Official Node.js client for PWF Auth (pwfauth.com): license-key activation, hardware-ID binding, encrypted sessions with a server-driven kill switch, free trials, remote texts/slides, and OTA update checks.",
+  "type": "module",
+  "main": "./src/index.js",
+  "exports": {
+    ".": {
+      "types": "./types/index.d.ts",
+      "import": "./src/index.js"
+    }
+  },
+  "types": "./types/index.d.ts",
+  "files": [
+    "src/",
+    "types/",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "test": "node --test test/"
+  },
+  "keywords": [
+    "licensing",
+    "license-key",
+    "authentication",
+    "auth",
+    "drm",
+    "activation",
+    "hwid",
+    "sdk",
+    "pwfauth"
+  ],
+  "author": "PWF Auth",
+  "license": "MIT",
+  "homepage": "https://pwfauth.com",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/pwfauth/pwfauth-node.git"
+  },
+  "bugs": {
+    "url": "https://github.com/pwfauth/pwfauth-node/issues"
+  }
+}
