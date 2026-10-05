@@ -24,6 +24,18 @@ export class CryptoEnvelope {
         this.#encKey = createHash('sha256').update('enc:' + appSecret, 'utf8').digest();
         this.#macKey = createHash('sha256').update('mac:' + appSecret, 'utf8').digest();
         this.#maxDriftSeconds = maxDriftSeconds;
+        /**
+         * Seconds added to this machine's clock when stamping requests and checking
+         * replies. The client sets it from the server's time when the server refuses a
+         * request because this machine's clock is wrong.
+         * @type {number}
+         */
+        this.clockOffsetSeconds = 0;
+    }
+
+    /** Unix time as the server sees it: this machine's clock plus the offset. */
+    now() {
+        return Math.floor(Date.now() / 1000) + Math.trunc(this.clockOffsetSeconds);
     }
 
     /**
@@ -39,7 +51,7 @@ export class CryptoEnvelope {
         const encrypted = Buffer.concat([cipher.update(json, 'utf8'), cipher.final()]);
 
         const p = Buffer.concat([iv, encrypted]).toString('base64');
-        const t = Math.floor(Date.now() / 1000);
+        const t = this.now();
         return JSON.stringify({ p, t, s: this.#hmacHex(p + t) });
     }
 
@@ -65,7 +77,7 @@ export class CryptoEnvelope {
                 'HMAC verification failed — wrong app secret, or the payload was tampered with.');
         }
 
-        if (Math.abs(Math.floor(Date.now() / 1000) - t) > this.#maxDriftSeconds) {
+        if (Math.abs(this.now() - t) > this.#maxDriftSeconds) {
             throw new PwfCryptoError(
                 "Envelope timestamp is outside the accepted window — check this machine's system clock.");
         }

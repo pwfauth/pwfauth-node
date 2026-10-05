@@ -28,3 +28,16 @@ export class PwfCryptoError extends PwfError {
         this.name = 'PwfCryptoError';
     }
 }
+
+/**
+ * An encrypted endpoint answered with an UNENCRYPTED "success". The license server
+ * encrypts every reply of these endpoints once it has accepted the app secret; only
+ * refusals travel as plain JSON. A plain success therefore did not come from PWF Auth —
+ * a proxy, a hosts-file redirect or a fake server sent it. Never unlock the app on it.
+ */
+export class PwfSecurityError extends PwfError {
+    constructor(message, options) {
+        super(message, options);
+        this.name = 'PwfSecurityError';
+    }
+}

@@ -1,8 +1,9 @@
 # PWF Auth for Node.js
 
 Official client for [PWF Auth](https://pwfauth.com) — license keys, user accounts,
-hardware-ID binding, encrypted sessions with a server-side kill switch, free trials,
-remote content, and OTA update checks.
+hardware-ID binding, encrypted sessions with a server-side kill switch, self-service
+device moves, accounts that run on license keys, free trials, remote content, and OTA
+update checks.
 
 ```bash
 npm install pwfauth
@@ -14,6 +15,22 @@ Ships TypeScript definitions.
 > **Server-side only.** The app secret must never reach a browser. Anyone holding it can
 > call the API as your application, so do not bundle this into front-end code. See
 > [Security](#security) below.
+
+## What's new in 1.1.0
+
+* **The kill switch cannot be dodged.** Only an encrypted reply counts as the server's
+  answer. A plain refusal no longer keeps the session alive forever: the commonest is
+  the server rejecting a clock moved more than 5 minutes. A fake `{"success": true}`
+  doesn't either.
+* **A fake server is refused.** An unencrypted "success" from the login, heartbeat or
+  app-content endpoints rejects with `PwfSecurityError` instead of signing the user in.
+* **A wrong PC clock repairs itself.** The client shifts by the server's time and
+  retries once. Opt out with `autoCorrectClock: false`.
+* **Move a license to a new PC:** `resetHardwareId(key, reason)`.
+* **Accounts that run on license keys:** `registerAccountWithKey()` and `redeemKey()`.
+* Clearer errors when there is no connection, and a `User-Agent` header.
+
+See [CHANGELOG.md](CHANGELOG.md).
 
 ## Quick start
 
@@ -46,9 +63,14 @@ client.startHeartbeat();                 // keeps the session alive AND enforces
   nothing but also never learns it was revoked.
 * Every beat re-checks the license: ban, pause, expiry, HWID reset, deletion and
   maintenance mode all end the session on the very next beat.
-* If the server is unreachable for `maxHeartbeatFailures` beats in a row (3 by default),
-  the client ends the session itself with `NETWORK_LOST`. Without that, blocking the
-  license domain in a firewall would keep the application running forever.
+* Only an encrypted reply counts as an answer. If `maxHeartbeatFailures` beats in a row
+  (3 by default) get none, the client ends the session itself:
+  * the causes are no reply, a plain refusal, or a forged plain "success";
+  * the code is `NETWORK_LOST`, or `CLOCK_SKEW` when the server kept rejecting the clock;
+  * HTTP 429 has its own budget, `maxRateLimitedBeats` (10).
+
+  Without that, blocking the license domain in a firewall, or moving the system clock,
+  would keep the application running forever.
 
 The timer is `unref()`d, so it never holds a process open on its own.
 
@@ -93,14 +115,33 @@ const texts  = await client.getTexts();             // remote strings, per-key o
 const slides = await client.getSlides();            // announcement slides
 const update = await client.checkUpdate('1.4.2');   // OTA: version, sha256, download URL
 const trial  = await client.createTrial();          // free trial for this machine
-await client.requestHardwareReset(key, 'New laptop');
 
 // User accounts (the username/password half of the platform)
 await client.registerAccount('alice', 's3cret', 'alice@example.com');
-await client.accountLogin('alice', 's3cret');
+await client.registerAccountWithKey('alice', 's3cret', key);   // when the app wants a key at sign-up
+await client.accountLogin('alice', 's3cret');                  // opens a session, like login()
+await client.redeemKey(anotherKey);                            // adds the key's time to the account
+await client.changeAccountPassword('alice', 's3cret', 'n3w!'); // signs the account out everywhere
 
-await client.logout();                               // frees the device seat
+await client.logout();                               // ends the session (the key stays bound here)
 ```
+
+## Moving a license to a new PC
+
+```js
+let login = await client.login(key);
+if (login.errorCode === PwfErrorCodes.HWID_MISMATCH || login.errorCode === PwfErrorCodes.DEVICE_LIMIT) {
+    if (await askUser('This key is used on another computer. Move it here?')) {
+        const moved = await client.resetHardwareId(key, 'New laptop');
+        if (moved.success) login = await client.login(key);
+        else console.error(moved.message);          // e.g. the cooldown: "try again in 11 hours"
+    }
+}
+```
+
+The move unbinds the key from every machine and ends its sessions. In App Settings you
+decide whether customers may move keys themselves, and the cooldown between two moves
+(12 hours by default).
 
 Endpoints this client does not wrap yet are still reachable — `postEnvelope`,
 `getEnvelope` and `postPlain` are public, and so is `CryptoEnvelope`.
@@ -111,17 +152,18 @@ An API answer that simply says "no" is a resolved promise with `success === fals
 Only transport and crypto problems reject:
 
 ```js
-import { PwfHttpError, PwfCryptoError, PwfErrorCodes } from 'pwfauth';
+import { PwfHttpError, PwfCryptoError, PwfSecurityError, PwfErrorCodes } from 'pwfauth';
 
 try {
     const res = await client.login(key);
     if (!res.success) {
-        if (res.errorCode === PwfErrorCodes.HWID_MISMATCH) showHardwareResetDialog();
+        if (res.errorCode === PwfErrorCodes.HWID_MISMATCH) showMoveLicenseDialog();
         else console.error(res.message);
     }
 } catch (e) {
-    if (e instanceof PwfHttpError)   console.error(`Server unreachable (${e.status})`);
-    if (e instanceof PwfCryptoError) console.error('Wrong app secret for this application.');
+    if (e instanceof PwfSecurityError) console.error('Not the license server — never unlock on this.');
+    if (e instanceof PwfHttpError)     console.error(`No usable reply (${e.status}): ${e.message}`);   // 401 = wrong app secret, 0 = no connection
+    if (e instanceof PwfCryptoError)   console.error('Wrong app secret for this application.');
 }
 ```
 
@@ -139,8 +181,11 @@ const client = new PwfClient({
     baseUrl: 'https://pwfauth.com',
     hardwareId: myOwnFingerprint,   // default: getHardwareId()
     timeoutMs: 15000,
-    maxHeartbeatFailures: 3,
+    maxHeartbeatFailures: 3,        // beats without an encrypted answer before NETWORK_LOST
+    maxRateLimitedBeats: 10,        // separate budget for HTTP 429
+    autoCorrectClock: true,         // repair a wrong system clock from the server's time
     maxClockDriftSeconds: 300,      // must match the server
+    userAgent: 'MyApp/2.0',         // default: pwfauth-node/<version>
     fetch: myFetch,                 // inject for proxies or tests
 });
 ```
@@ -150,8 +195,9 @@ const client = new PwfClient({
 `getHardwareId()` reads the Windows cryptography MachineGuid, `/etc/machine-id` on
 Linux, or the platform UUID on macOS, and falls back to the host name. It does not use
 `wmic`, which Windows 11 24H2 removed. The same machine produces the same HWID under
-this client and the [.NET client](https://www.nuget.org/packages/PWFAuth), so a user can
-move between them without tripping the device limit.
+this client, the [.NET client](https://www.nuget.org/packages/PWFAuth) and the
+[Python client](https://pypi.org/project/pwfauth/), so a user can move between them
+without tripping the device limit.
 
 ## Security
 

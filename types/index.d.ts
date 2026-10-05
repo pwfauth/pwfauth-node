@@ -10,8 +10,17 @@ export interface PwfClientOptions {
     hardwareId?: string;
     /** @default 15000 */
     timeoutMs?: number;
-    /** Consecutive unreachable beats before the client ends the session itself. @default 3 */
+    /**
+     * Beats in a row without an encrypted answer (no reply, a plain refusal, a forged plain
+     * success) before the client ends the session with NETWORK_LOST or CLOCK_SKEW. @default 3
+     */
     maxHeartbeatFailures?: number;
+    /** Separate budget for beats answered with HTTP 429. @default 10 */
+    maxRateLimitedBeats?: number;
+    /** Repair a wrong system clock from the server's time and retry once. @default true */
+    autoCorrectClock?: boolean;
+    /** @default 'pwfauth-node/<version> (+https://pwfauth.com)' */
+    userAgent?: string;
     /** Must match the server. @default 300 */
     maxClockDriftSeconds?: number;
     /** Inject a fetch implementation (tests, proxies). Defaults to global fetch. */
@@ -35,7 +44,7 @@ export interface PwfLicense {
 }
 
 export interface SessionEndedEvent {
-    /** One of {@link PwfErrorCodes}. `NETWORK_LOST` is raised by the client, not the server. */
+    /** One of {@link PwfErrorCodes}. `NETWORK_LOST` and `CLOCK_SKEW` are raised by the client, not the server. */
     errorCode: string;
     /** Safe to show the end user. */
     message: string;
@@ -47,11 +56,15 @@ export interface RequestOptions {
 
 /** One API reply. */
 export declare class PwfResponse {
-    constructor(data: Record<string, any>, rawJson: string);
-    static parse(json: string): PwfResponse;
+    constructor(data: Record<string, any>, rawJson: string, isEnveloped?: boolean, statusCode?: number);
+    static parse(json: string, opts?: { isEnveloped?: boolean; statusCode?: number }): PwfResponse;
     /** The parsed JSON body — use it for endpoint-specific fields. */
     readonly data: Record<string, any>;
     readonly rawJson: string;
+    /** True when the reply was encrypted — only the license server can seal one. */
+    readonly isEnveloped: boolean;
+    /** The HTTP status (0 when unknown). */
+    readonly statusCode: number;
     readonly success: boolean;
     readonly errorCode: string | undefined;
     readonly message: string | undefined;
@@ -70,6 +83,8 @@ export declare class PwfClient extends EventEmitter {
     sessionId: string | null;
     licenseKey: string | null;
     heartbeatIntervalSeconds: number;
+    /** How far this client shifts its clock to match the server (0 normally). */
+    readonly clockOffsetSeconds: number;
 
     on(event: 'sessionEnded', listener: (e: SessionEndedEvent) => void): this;
     once(event: 'sessionEnded', listener: (e: SessionEndedEvent) => void): this;
@@ -90,11 +105,22 @@ export declare class PwfClient extends EventEmitter {
     trackSocialClick(linkId: number, opts?: RequestOptions): Promise<PwfResponse>;
 
     createTrial(opts?: RequestOptions): Promise<PwfResponse>;
+    /**
+     * Moves a license to this PC (self-service): unbinds the key from every machine and
+     * ends its sessions, so the next login() binds it here. The app's cooldown applies.
+     */
+    resetHardwareId(licenseKey: string, reason?: string, opts?: RequestOptions): Promise<PwfResponse>;
+    /** @deprecated The dashboard does not show these requests. Use {@link resetHardwareId}. */
     requestHardwareReset(licenseKey: string, reason?: string, opts?: RequestOptions): Promise<PwfResponse>;
 
     registerAccount(username: string, password: string, email?: string, opts?: RequestOptions): Promise<PwfResponse>;
+    /** Creates an account with an unused key: it takes the key's time and device limit, and the key is used up. */
+    registerAccountWithKey(username: string, password: string, licenseKey: string, email?: string, opts?: RequestOptions): Promise<PwfResponse>;
     accountLogin(username: string, password: string, opts?: RequestOptions): Promise<PwfResponse>;
+    /** Also signs the account out on every device. */
     changeAccountPassword(username: string, currentPassword: string, newPassword: string, opts?: RequestOptions): Promise<PwfResponse>;
+    /** Adds an unused key's time to an account: pass the username and password, or neither to use the accountLogin() session. */
+    redeemKey(licenseKey: string, username?: string | null, password?: string | null, opts?: RequestOptions): Promise<PwfResponse>;
 
     /** Escape hatches for endpoints this client does not wrap yet. */
     postEnvelope(path: string, body: Record<string, unknown>, opts?: RequestOptions): Promise<PwfResponse>;
@@ -105,6 +131,10 @@ export declare class PwfClient extends EventEmitter {
 /** The AES-256-CBC + HMAC-SHA256 envelope codec. */
 export declare class CryptoEnvelope {
     constructor(appSecret: string, maxDriftSeconds?: number);
+    /** Seconds added to this machine's clock when stamping requests and checking replies. */
+    clockOffsetSeconds: number;
+    /** Unix time as the server sees it. */
+    now(): number;
     encrypt(json: string): string;
     decrypt(envelopeJson: string): string;
     static looksLikeEnvelope(json: string): boolean;
@@ -116,6 +146,11 @@ export declare class PwfHttpError extends PwfError {
     readonly responseSnippet: string;
 }
 export declare class PwfCryptoError extends PwfError {}
+/** An encrypted endpoint answered with an unencrypted "success" — not the license server. */
+export declare class PwfSecurityError extends PwfError {}
+
+/** This package's version, e.g. "1.1.0". */
+export declare const VERSION: string;
 
 export declare const PwfErrorCodes: Readonly<{
     MISSING_FIELDS: string; INVALID_KEY: string; INVALID_CREDENTIALS: string;
@@ -123,7 +158,11 @@ export declare const PwfErrorCodes: Readonly<{
     BANNED: string; PAUSED: string; MAINTENANCE: string;
     SESSION_EXPIRED: string; SESSION_MISMATCH: string; SESSION_REVOKED: string;
     HWID_RESET: string; TRIAL_DISABLED: string; TRIAL_USED: string;
-    TRIAL_LIMIT: string; NETWORK_LOST: string;
+    TRIAL_LIMIT: string; OPEN_ACCESS_LIMIT: string;
+    KEY_NOT_ACTIVE: string; NO_HWID: string; RATE_LIMITED: string; SELF_RESET_DISABLED: string;
+    KEY_REQUIRED: string; KEY_ALREADY_USED: string; KEY_IN_USE: string; KEY_REDEEMED: string;
+    ALREADY_LIFETIME: string; USERNAME_EXISTS: string; CRYPTO_ERROR: string;
+    NETWORK_LOST: string; CLOCK_SKEW: string;
 }>;
 
 /** True when this code means the session is over and the app must sign the user out. */
