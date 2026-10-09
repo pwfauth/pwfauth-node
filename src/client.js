@@ -1,10 +1,11 @@
+import { newNonce, validateOrigin, validatePath, verifyReply } from './serverAuth.js';
 import { EventEmitter } from 'node:events';
 import { CryptoEnvelope } from './envelope.js';
 import { PwfError, PwfHttpError, PwfSecurityError } from './errors.js';
 import { endsSession, PwfErrorCodes } from './errorCodes.js';
 import { getHardwareId } from './hardwareId.js';
 
-export const VERSION = '1.1.0';
+export const VERSION = '1.2.0';
 
 const SNIPPET = 200;
 const TOO_MANY_REQUESTS = 429;
@@ -28,7 +29,7 @@ export class PwfResponse {
     constructor(data, rawJson, isEnveloped = false, statusCode = 0) {
         this.data = data;
         this.rawJson = rawJson;
-        /** Only the license server can seal a reply, so only an encrypted one proves it answered. */
+        /** Whether this response also used the shared-secret envelope; server authenticity is checked separately. */
         this.isEnveloped = isEnveloped;
         this.statusCode = statusCode;
     }
@@ -156,9 +157,7 @@ export class PwfClient extends EventEmitter {
         };
         this.#options.appSecret = String(this.#options.appSecret).trim();
         this.#options.baseUrl = String(this.#options.baseUrl).replace(/\/+$/, '');
-        if (!/^https?:\/\/[^/]+/i.test(this.#options.baseUrl)) {
-            throw new TypeError('baseUrl must be an absolute URL, e.g. https://pwfauth.com');
-        }
+        validateOrigin(this.#options.baseUrl);
         if (!(this.#options.maxHeartbeatFailures >= 1)) {
             throw new RangeError('maxHeartbeatFailures must be at least 1, otherwise an unreachable server leaves the app running forever.');
         }
@@ -276,8 +275,8 @@ export class PwfClient extends EventEmitter {
     async #beat(loop) {
         if (this.#loop !== loop || !this.isSignedIn) return;
 
-        // Only an encrypted reply proves the license server answered — nothing else can
-        // seal one. Every other outcome is an unanswered beat: no reply, a reply that fails
+        // After signature verification, require an encrypted session reply.
+        // A signed plain refusal cannot confirm that the session is active. Every other outcome is an unanswered beat: no reply, a reply that fails
         // verification, a forged plain "success" (PwfSecurityError), and plain refusals,
         // which the server sends when it cannot verify the request at all. The commonest of
         // those is its replay check rejecting a clock more than five minutes off; treating
@@ -596,6 +595,8 @@ export class PwfClient extends EventEmitter {
     }
 
     async #send(path, init, opts, requireEnvelope) {
+        validatePath(path);
+        const nonce = newNonce();
         const controller = new AbortController();
         let timedOut = false;
         const timer = setTimeout(() => { timedOut = true; controller.abort(); }, this.#options.timeoutMs);
@@ -603,15 +604,16 @@ export class PwfClient extends EventEmitter {
         const onAbort = () => controller.abort();
         opts.signal?.addEventListener('abort', onAbort, { once: true });
 
-        const headers = { ...init.headers };
+        const headers = { ...init.headers, 'X-PWF-Nonce': nonce };
         if (this.#options.userAgent) headers['User-Agent'] = this.#options.userAgent;
 
         let response;
         let raw;
+        let body;
         try {
             response = await this.#options.fetch(this.#options.baseUrl + path,
-                { ...init, headers, signal: controller.signal });
-            raw = await response.text();
+                { ...init, headers, redirect: 'error', signal: controller.signal });
+            body = Buffer.from(await response.arrayBuffer());
         } catch (cause) {
             if (opts.signal?.aborted) throw cause;    // caller cancelled — surface as-is
             const why = timedOut
@@ -624,6 +626,8 @@ export class PwfClient extends EventEmitter {
         }
 
         const status = response.status;
+        verifyReply(nonce, init.method ?? 'GET', path, init.body, status, body, response.headers.get('X-PWF-Signature'));
+        raw = body.toString('utf8');
 
         if (!raw || !raw.trim()) {
             throw new PwfHttpError(status, `License server returned HTTP ${status} with an empty body.`);

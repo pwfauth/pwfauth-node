@@ -1,6 +1,6 @@
 {
   "name": "pwfauth",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Official Node.js client for PWF Auth (pwfauth.com): license-key activation, hardware-ID binding, encrypted sessions with a server-driven kill switch, self-service device moves, accounts on license keys, free trials, remote texts/slides, and OTA update checks.",
   "type": "module",
   "main": "./src/index.js",

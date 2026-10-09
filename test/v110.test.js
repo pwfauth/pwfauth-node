@@ -7,7 +7,8 @@ import { createServer } from 'node:http';
 import {
     CryptoEnvelope, PwfClient, PwfError, PwfErrorCodes, PwfHttpError, PwfSecurityError,
     VERSION, endsSession,
-} from '../src/index.js';
+    signReply,
+} from './clientUnderTest.js';
 
 const SECRET = 'c'.repeat(64);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -33,8 +34,9 @@ async function withServer(handler, fn, { serverOffset = 0 } = {}) {
             seen.push({ path: req.url, method: req.method, headers: req.headers, body, raw });
             const out = handler({ path: req.url, body, raw, count: seen.length, headers: req.headers });
             const payload = JSON.stringify(out.json);
-            res.writeHead(out.status ?? 200, { 'Content-Type': 'application/json' });
-            res.end(out.plain ? payload : env.encrypt(payload));
+            const reply = out.plain ? payload : env.encrypt(payload);
+            res.writeHead(out.status ?? 200, { 'Content-Type': 'application/json', 'X-PWF-Signature': signReply(req, raw, out.status ?? 200, reply) });
+            res.end(reply);
         });
     });
     await new Promise((r) => server.listen(0, '127.0.0.1', r));
@@ -257,7 +259,7 @@ test('a User-Agent with the version goes on every request', async () => {
     await withServer(() => ({ json: { success: true } }), async ({ baseUrl, seen }) => {
         await client(baseUrl).getAppInfo();
         assert.equal(seen[0].headers['user-agent'], `pwfauth-node/${VERSION} (+https://pwfauth.com)`);
-        assert.equal(VERSION, '1.1.0');
+        assert.equal(VERSION, '1.2.0');
     });
 });
 
@@ -267,7 +269,7 @@ test('no connection: the message says so (not "did not respond in time")', async
 });
 
 test('options are validated', () => {
-    assert.throws(() => new PwfClient({ appSecret: SECRET, baseUrl: 'pwfauth.com' }), TypeError);
+    assert.throws(() => new PwfClient({ appSecret: SECRET, baseUrl: 'pwfauth.com' }), PwfSecurityError);
     assert.throws(() => new PwfClient({ appSecret: SECRET, maxHeartbeatFailures: 0 }), RangeError);
     assert.throws(() => new PwfClient({ appSecret: SECRET, maxRateLimitedBeats: 0 }), RangeError);
 });

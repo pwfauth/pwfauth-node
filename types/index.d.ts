@@ -61,7 +61,7 @@ export declare class PwfResponse {
     /** The parsed JSON body — use it for endpoint-specific fields. */
     readonly data: Record<string, any>;
     readonly rawJson: string;
-    /** True when the reply was encrypted — only the license server can seal one. */
+    /** True when the reply was encrypted; server signatures are verified independently. */
     readonly isEnveloped: boolean;
     /** The HTTP status (0 when unknown). */
     readonly statusCode: number;

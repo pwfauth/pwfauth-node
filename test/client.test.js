@@ -2,8 +2,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import {
-    CryptoEnvelope, PwfClient, PwfHttpError, PwfResponse, endsSession, PwfErrorCodes,
-} from '../src/index.js';
+    CryptoEnvelope, PwfClient, PwfSecurityError, PwfHttpError, PwfResponse, endsSession, PwfErrorCodes,
+    signReply,
+} from './clientUnderTest.js';
 
 const SECRET = 'c'.repeat(64);
 
@@ -26,8 +27,9 @@ async function withServer(handler, fn) {
             const out = handler({ path: req.url, body: decoded, count: seen.length });
             const status = out.status ?? 200;
             const payload = JSON.stringify(out.json);
-            res.writeHead(status, { 'Content-Type': 'application/json' });
-            res.end(out.plain ? payload : env.encrypt(payload));
+            const reply = out.plain ? payload : env.encrypt(payload);
+            res.writeHead(status, { 'Content-Type': 'application/json', 'X-PWF-Signature': signReply(req, body, status, reply) });
+            res.end(reply);
         });
     });
     await new Promise((r) => server.listen(0, '127.0.0.1', r));
@@ -195,7 +197,7 @@ test('plain-JSON endpoints are not enveloped', async () => {
         });
 });
 
-test('a non-JSON body raises PwfHttpError with a snippet', async () => {
+test('an unsigned proxy error is rejected before parsing', async () => {
     const server = createServer((_req, res) => {
         res.writeHead(502, { 'Content-Type': 'text/html' });
         res.end('<html><body>502 Bad Gateway</body></html>');
@@ -205,9 +207,9 @@ test('a non-JSON body raises PwfHttpError with a snippet', async () => {
     try {
         const c = new PwfClient({ appSecret: SECRET, baseUrl, hardwareId: 'H1' });
         await assert.rejects(() => c.login('K'), (e) => {
-            assert.ok(e instanceof PwfHttpError);
-            assert.equal(e.status, 502);
-            assert.match(e.responseSnippet, /502 Bad Gateway/);
+            assert.ok(e instanceof PwfSecurityError);
+
+
             return true;
         });
     } finally {
@@ -227,7 +229,7 @@ test('a reply sealed with another secret is rejected, not trusted', async () => 
     const baseUrl = `http://127.0.0.1:${server.address().port}`;
     try {
         const c = new PwfClient({ appSecret: SECRET, baseUrl, hardwareId: 'H1' });
-        await assert.rejects(() => c.login('K'), /HMAC verification failed/);
+        await assert.rejects(() => c.login('K'), /Missing or invalid server signature/);
         assert.equal(c.isSignedIn, false);
     } finally {
         await new Promise((r) => server.close(r));
@@ -277,6 +279,6 @@ test('constructor validates input', () => {
     assert.throws(() => new PwfClient(''), TypeError);
     assert.throws(() => new PwfClient({}), TypeError);
     // A trailing slash in baseUrl must not produce a double slash in request URLs.
-    const c = new PwfClient({ appSecret: SECRET, baseUrl: 'https://example.com/' });
+    const c = new PwfClient({ appSecret: SECRET, baseUrl: 'https://pwfauth.com/' });
     assert.ok(c instanceof PwfClient);
 });

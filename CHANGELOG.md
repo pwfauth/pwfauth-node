@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.2.0
+
+- Pin the production HTTPS origin and independently verify every server response.
+- Reject missing, forged, tampered and replayed responses before parsing.
+- Disable redirects in the default transport. Custom transports are trusted application code and must retain TLS validation and disable redirects.
+
+
 All notable changes to the [`pwfauth`](https://www.npmjs.com/package/pwfauth) package.
 Versions follow [semantic versioning](https://semver.org).
 

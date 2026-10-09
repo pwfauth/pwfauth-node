@@ -1,0 +1,9 @@
+{
+  "nonce": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "method": "POST",
+  "path": "/api/auth/login.php",
+  "request": "{\"test\":\"request\"}",
+  "status": 200,
+  "body": "{\"success\":true,\"session_id\":\"fixture\"}",
+  "signature": "VTyjzHpHkyK284vZXw2DjPr6wMWY3oHukQ/RYmJZmxC0czUiGt4N3FJ5LO+E8hhF8wuK0cK6/Io3kMuFGvbrt01W96lEodNj3wqT5e2wjSFAuG9w9TLtg8OAu1tz4jtaME3d1wa7xykqC4kjoQfaqCjHbbvynPOoFS7nhJT2oifpnIYkX+xJZ7Rz8t3Du/wzcbDs7CxclTfpodllFYDsw5bFiyifxscIxH/1ymQaZaSmqDtd9L7bZWx0JvAnDibmJ/VbwPA/JM+FU1WvTrXHpYCoB4PT+ExKKh2ax6tICAzYhIQf9eHqbb5aWEQdxpy6W8Pg950xAa5aHmji0n99GCGK8SWn/4pEol+g7B23XXZB7O5QgNv66jyjbv6shos/nzF3Z4LN5KefORuHMhW7a7kf3+fo8FqOnuwRycw3S4MdlTjru1FJuCNuRNjyxm1TnNzFPVppPWzQ2/eDWNhvVw71WyzOe6t7SEim55pWp3S0pRMIOPoGJX8FV1KoWawu"
+}
