@@ -1,5 +1,17 @@
 # PWF Auth for Node.js
 
+## Install this security release now
+
+npm registry publication of 1.2.0 is pending. A plain `npm install pwfauth` may still
+install the older release. Install the official GitHub package and keep the generated lockfile:
+
+```sh
+npm install https://github.com/pwfauth/pwfauth-node/releases/download/v1.2.0/pwfauth-1.2.0.tgz
+```
+
+Package SHA-256: `67c2500e1c2f06e198a72613f48b6229e9450b287d6f324efe6ceffb35574418`.
+
+
 ## Server authentication update
 
 All responses, including errors and clock-correction responses, must carry a valid
