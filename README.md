@@ -1,3 +1,6 @@
+<p align="center"><b>English</b> · <a href="README.zh-CN.md">简体中文</a> · <a href="README.tr.md">Türkçe</a> · <a href="README.ar.md">العربية</a></p>
+<p align="center">Video tutorials: <a href="https://www.youtube.com/@pwfauth">youtube.com/@pwfauth</a></p>
+
 # PWF Auth for Node.js
 
 ## Install this security release now
@@ -9,7 +12,7 @@ install the older release. Install the official GitHub package and keep the gene
 npm install https://github.com/pwfauth/pwfauth-node/releases/download/v1.2.0/pwfauth-1.2.0.tgz
 ```
 
-Package SHA-256: `67c2500e1c2f06e198a72613f48b6229e9450b287d6f324efe6ceffb35574418`.
+Package SHA-256: `67c2500e1c2f06e198a72613f48b6229e9450b287d6f324efe6ceffb35574418`
 
 
 ## Server authentication update
@@ -19,50 +22,50 @@ RSA-SHA256 signature from the pinned PWFAuth public key. The private signing key
 stays on the server. Knowing the application secret is not enough to forge this
 signature. A fresh random nonce binds each response to its request, method, path,
 HTTP status and exact body bytes (PWF-REPLY-V1). Query strings are not part of the
-V1 signed path; production HTTPS protects them in transit.
+V1 signed path; production HTTPS protects them in transit
 
 The SDK accepts only `https://pwfauth.com`. Its default transport validates TLS
 certificates and refuses redirects. Missing/invalid signatures fail closed before
 JSON parsing or envelope decryption; unsigned proxy/CDN errors are security errors.
 There is no fallback to the old unsigned protocol. Update the server before clients.
-Applications must never unlock functionality after a security or transport error.
+Applications must never unlock functionality after a security or transport error
 
 This addresses server emulation. It does not prevent an attacker who controls the
 client machine from modifying the application itself. Keep authoritative valuable
-operations on the server and keep real app secrets out of public repositories.
+operations on the server and keep real app secrets out of public repositories
 
 
-Official client for [PWF Auth](https://pwfauth.com) — license keys, user accounts,
+Official client for [PWF Auth](https://pwfauth.com): license keys, user accounts,
 hardware-ID binding, encrypted sessions with a server-side kill switch, self-service
 device moves, accounts that run on license keys, free trials, remote content, and OTA
-update checks.
+update checks
 
 ```bash
 npm install pwfauth
 ```
 
-Node 18+. Zero dependencies — built on the runtime's own `fetch` and `crypto`.
-Ships TypeScript definitions.
+Node 18+. Zero dependencies, built on the runtime's own `fetch` and `crypto`.
+Ships TypeScript definitions
 
 > **Server-side only.** The app secret must never reach a browser. Anyone holding it can
 > call the API as your application, so do not bundle this into front-end code. See
-> [Security](#security) below.
+> [Security](#security) below
 
 ## What's new in 1.1.0
 
 * **The kill switch cannot be dodged.** Only an encrypted reply counts as the server's
   answer. A plain refusal no longer keeps the session alive forever: the commonest is
   the server rejecting a clock moved more than 5 minutes. A fake `{"success": true}`
-  doesn't either.
+  doesn't either
 * **A fake server is refused.** An unencrypted "success" from the login, heartbeat or
-  app-content endpoints rejects with `PwfSecurityError` instead of signing the user in.
+  app-content endpoints rejects with `PwfSecurityError` instead of signing the user in
 * **A wrong PC clock repairs itself.** The client shifts by the server's time and
-  retries once. Opt out with `autoCorrectClock: false`.
-* **Move a license to a new PC:** `resetHardwareId(key, reason)`.
-* **Accounts that run on license keys:** `registerAccountWithKey()` and `redeemKey()`.
-* Clearer errors when there is no connection, and a `User-Agent` header.
+  retries once. Opt out with `autoCorrectClock: false`
+* **Move a license to a new PC:** `resetHardwareId(key, reason)`
+* **Accounts that run on license keys:** `registerAccountWithKey()` and `redeemKey()`
+* Clearer errors when there is no connection, and a `User-Agent` header
 
-See [CHANGELOG.md](CHANGELOG.md).
+See [CHANGELOG.md](CHANGELOG.md)
 
 ## Quick start
 
@@ -89,26 +92,26 @@ client.startHeartbeat();                 // keeps the session alive AND enforces
 
 ## Why the heartbeat matters
 
-`startHeartbeat()` is not optional bookkeeping — it is the enforcement point.
+`startHeartbeat()` is not optional bookkeeping: it is the enforcement point
 
 * The server drops a session that stops beating, so a client that never beats loses
-  nothing but also never learns it was revoked.
+  nothing but also never learns it was revoked
 * Every beat re-checks the license: ban, pause, expiry, HWID reset, deletion and
-  maintenance mode all end the session on the very next beat.
+  maintenance mode all end the session on the very next beat
 * Only an encrypted reply counts as an answer. If `maxHeartbeatFailures` beats in a row
   (3 by default) get none, the client ends the session itself:
   * the causes are no reply, a plain refusal, or a forged plain "success";
   * the code is `NETWORK_LOST`, or `CLOCK_SKEW` when the server kept rejecting the clock;
-  * HTTP 429 has its own budget, `maxRateLimitedBeats` (10).
+  * HTTP 429 has its own budget, `maxRateLimitedBeats` (10)
 
   Without that, blocking the license domain in a firewall, or moving the system clock,
-  would keep the application running forever.
+  would keep the application running forever
 
-The timer is `unref()`d, so it never holds a process open on its own.
+The timer is `unref()`d, so it never holds a process open on its own
 
 ## What the login reply contains
 
-`login.license` parses the licence block for you — including the case that trips most
+`login.license` parses the licence block for you, including the case that trips most
 integrations:
 
 ```js
@@ -136,7 +139,7 @@ if (login.features.pro_tier) enableProExport();
 | `isLifetime` | boolean | Convenience for `expiresAt === null` |
 
 Anything the API adds later stays reachable through `login.data` (the raw parsed JSON)
-without waiting for a package update.
+without waiting for a package update
 
 ## What else it does
 
@@ -173,10 +176,10 @@ if (login.errorCode === PwfErrorCodes.HWID_MISMATCH || login.errorCode === PwfEr
 
 The move unbinds the key from every machine and ends its sessions. In App Settings you
 decide whether customers may move keys themselves, and the cooldown between two moves
-(12 hours by default).
+(12 hours by default)
 
-Endpoints this client does not wrap yet are still reachable — `postEnvelope`,
-`getEnvelope` and `postPlain` are public, and so is `CryptoEnvelope`.
+Endpoints this client does not wrap yet are still reachable: `postEnvelope`,
+`getEnvelope` and `postPlain` are public, and so is `CryptoEnvelope`
 
 ## Handling failures
 
@@ -229,7 +232,7 @@ Linux, or the platform UUID on macOS, and falls back to the host name. It does n
 `wmic`, which Windows 11 24H2 removed. The same machine produces the same HWID under
 this client, the [.NET client](https://www.nuget.org/packages/PWFAuth) and the
 [Python client](https://pypi.org/project/pwfauth/), so a user can move between them
-without tripping the device limit.
+without tripping the device limit
 
 ## Security
 
@@ -237,14 +240,14 @@ The app secret is what the envelope protocol encrypts with, so whatever runs the
 must hold it. That means:
 
 * **Keep it server-side.** Never ship it to a browser, a mobile app bundle, or any
-  client you do not control.
-* Read it from the environment (`process.env.PWFAUTH_SECRET`) or a secrets manager —
-  never commit it.
+  client you do not control
+* Read it from the environment (`process.env.PWFAUTH_SECRET`) or a secrets manager,
+  never commit it
 * If it leaks, rotate it in the dashboard. Rotating invalidates every deployed copy, so
-  plan the rollout.
+  plan the rollout
 
 ## License
 
 MIT © PWF Auth
 
-Custom fetch instances are trusted application code: configure them to reject redirects and validate TLS certificates. The SDK cannot inspect an injected transport's internal handler. Independent response signature verification still applies.
+Custom fetch instances are trusted application code: configure them to reject redirects and validate TLS certificates. The SDK cannot inspect an injected transport's internal handler. Independent response signature verification still applies
